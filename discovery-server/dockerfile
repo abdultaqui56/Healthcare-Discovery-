@@ -1,0 +1,22 @@
+# Use Maven image to build the project
+FROM maven:latest AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Use Eclipse Temurin image to extract the JAR file layers
+FROM eclipse-temurin:21-jre-alpine AS builder
+WORKDIR extracted
+COPY --from=build /app/target/*.jar app.jar
+RUN java -Djarmode=tools -jar app.jar extract --layers
+
+# Use Eclipse Temurin image to run the application
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR application
+COPY --from=builder /extracted/app/dependencies/ ./
+COPY --from=builder /extracted/app/spring-boot-loader/ ./
+COPY --from=builder /extracted/app/snapshot-dependencies/ ./
+COPY --from=builder /extracted/app/application/ ./
+EXPOSE 8761
+ENTRYPOINT ["java", "-jar", "app.jar"]
